@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bulk QR Code Page Generator</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 24px;
+      line-height: 1.4;
+    }
+
+    h1 { margin-top: 0; }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 16px;
+      border: 1px solid #6664;
+      border-radius: 12px;
+      background: #7771;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.95rem;
+    }
+
+    input {
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #6668;
+      font: inherit;
+    }
+
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      align-items: end;
+      gap: 8px;
+    }
+
+    #qrGrid {
+      display: grid;
+      align-items: start;
+      justify-content: start;
+    }
+
+    .qr-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #6664;
+      background: #7771;
+      min-width: 0;
+    }
+
+    .qr-label {
+      max-width: 100%;
+      font-size: 0.75rem;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bulk QR Code Generator</h1>
+  <p>Generate a page with many unique QR codes by appending a random suffix to a base URL.</p>
+
+  <div class="controls">
+    <label>
+      Base URL
+      <input id="baseUrl" type="url" value="https://example.com/item" placeholder="https://example.com/path" />
+    </label>
+
+    <label>
+      Columns
+      <input id="columns" type="number" value="4" min="1" step="1" />
+    </label>
+
+    <label>
+      Rows
+      <input id="rows" type="number" value="5" min="1" step="1" />
+    </label>
+
+    <label>
+      QR Size (px)
+      <input id="size" type="number" value="120" min="50" step="5" />
+    </label>
+
+    <label>
+      Spacing (px)
+      <input id="spacing" type="number" value="14" min="0" step="1" />
+    </label>
+
+    <label>
+      Random Suffix Length
+      <input id="suffixLength" type="number" value="10" min="4" step="1" />
+    </label>
+
+    <div class="actions">
+      <button id="generateBtn" type="button">Generate</button>
+      <button id="printBtn" type="button">Print</button>
+    </div>
+  </div>
+
+  <div id="qrGrid" aria-live="polite"></div>
+
+  <script>
+    const qrGrid = document.getElementById('qrGrid');
+
+    function randomSuffix(length) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let out = '';
+      const bytes = new Uint32Array(length);
+      crypto.getRandomValues(bytes);
+      for (let i = 0; i < length; i += 1) {
+        out += chars[bytes[i] % chars.length];
+      }
+      return out;
+    }
+
+    function normalizeBaseUrl(value) {
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+    }
+
+    function makeQrImageUrl(text, size) {
+      const params = new URLSearchParams({
+        size: `${size}x${size}`,
+        data: text,
+        format: 'png',
+        margin: '0',
+      });
+      return `https://api.qrserver.com/v1/create-qr-code/?${params.toString()}`;
+    }
+
+    function generateQrs() {
+      const baseUrl = normalizeBaseUrl(document.getElementById('baseUrl').value);
+      const columns = Math.max(1, Number.parseInt(document.getElementById('columns').value, 10) || 1);
+      const rows = Math.max(1, Number.parseInt(document.getElementById('rows').value, 10) || 1);
+      const size = Math.max(50, Number.parseInt(document.getElementById('size').value, 10) || 120);
+      const spacing = Math.max(0, Number.parseInt(document.getElementById('spacing').value, 10) || 0);
+      const suffixLength = Math.max(4, Number.parseInt(document.getElementById('suffixLength').value, 10) || 10);
+
+      if (!baseUrl) {
+        alert('Please provide a base URL.');
+        return;
+      }
+
+      const total = columns * rows;
+      const used = new Set();
+
+      qrGrid.innerHTML = '';
+      qrGrid.style.gridTemplateColumns = `repeat(${columns}, ${size + 18}px)`;
+      qrGrid.style.gap = `${spacing}px`;
+
+      for (let i = 0; i < total; i += 1) {
+        let suffix = randomSuffix(suffixLength);
+        while (used.has(suffix)) {
+          suffix = randomSuffix(suffixLength);
+        }
+        used.add(suffix);
+
+        const fullUrl = `${baseUrl}/${suffix}`;
+
+        const wrapper = document.createElement('article');
+        wrapper.className = 'qr-item';
+
+        const img = document.createElement('img');
+        img.width = size;
+        img.height = size;
+        img.alt = `QR for ${fullUrl}`;
+        img.loading = 'lazy';
+        img.src = makeQrImageUrl(fullUrl, size);
+
+        const label = document.createElement('div');
+        label.className = 'qr-label';
+        label.textContent = fullUrl;
+
+        wrapper.appendChild(img);
+        wrapper.appendChild(label);
+        qrGrid.appendChild(wrapper);
+      }
+    }
+
+    document.getElementById('generateBtn').addEventListener('click', generateQrs);
+    document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+    generateQrs();
+  </script>
+</body>
+</html>
